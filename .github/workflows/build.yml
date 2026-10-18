@@ -16,9 +16,15 @@ jobs:
         shell: powershell
         run: .\Build.ps1 -RunSelfTest
 
+      - name: 打包单文件安装器
+        shell: powershell
+        run: .\setup\Build-Setup.ps1
+
       - name: 上传 exe
         uses: actions/upload-artifact@v4
         with:
           name: BatchRename
-          path: dist/BatchRename.exe
+          path: |
+            dist/BatchRename.exe
+            dist/RenameEditorSetup.exe
           if-no-files-found: error
