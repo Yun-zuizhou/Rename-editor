@@ -1,0 +1,28 @@
+# 编辑器统一设置（VS Code / Visual Studio / Rider 都认）
+# 重点：.cs 必须是 UTF-8 **带 BOM**，否则 .NET Framework 自带的 csc 4.0
+# 会按系统 ANSI 代码页解码，中文全变乱码（csc 4.0 不认 /utf-8）。
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.cs]
+charset = utf-8-bom
+indent_size = 4
+
+[*.{yml,yaml,json,md}]
+charset = utf-8
+end_of_line = lf
+indent_size = 2
+
+[*.ps1]
+charset = utf-8-bom
+indent_size = 4
+
+[*.{cpp,h,rc}]
+indent_size = 4

@@ -1,9 +1,9 @@
-# 打包 Win11 右键菜单的 MSIX 稀疏包（未签名，签名在 Install.ps1 里做）
+﻿# 打包 Win11 右键菜单的 MSIX 稀疏包（未签名，签名在 Install.ps1 里做）
 # 依赖：D:\Windows Kits\10 的 makeappx.exe
 $ErrorActionPreference = 'Stop'
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$msixDir = Join-Path $root 'msix'
-$stage = Join-Path $msixDir 'stage'
+$root = Split-Path -Parent $PSScriptRoot          # scripts\ 的上一层
+$msixDir = Join-Path $root 'package'
+$stage = Join-Path $root 'build\stage'
 $dist = Join-Path $root 'dist'
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 
@@ -16,7 +16,7 @@ $makeappx = Join-Path $sdkVer.FullName 'x64\makeappx.exe'
 
 # ---- 1. 生成资产图（44 / 150 / 50），从 256px 主图标缩放 ----
 Add-Type -AssemblyName System.Drawing
-$masterPath = Join-Path $root 'shell\preview-main.png'
+$masterPath = Join-Path $root 'src\shell\preview-main.png'
 $assets = Join-Path $stage 'Assets'
 New-Item -ItemType Directory -Force -Path $assets | Out-Null
 $map = @(
@@ -45,7 +45,7 @@ if (Test-Path $masterPath) {
 } else {
     # 没有母版就沿用仓库里已提交的资产图
     $missing = $map | Where-Object { -not (Test-Path (Join-Path $assets $_.Name)) }
-    if ($missing) { throw "缺少 msix\stage\Assets 里的资产图，且没有图标母版 shell\preview-main.png（先跑 tools\MakeIcon.exe 生成母版）" }
+    if ($missing) { throw "缺少 package\Assets 里的资产图，且没有图标母版 src\shell\preview-main.png（先跑 tools\MakeIcon.cs 生成的 exe）" }
     'asset 沿用已有资产图'
 }
 

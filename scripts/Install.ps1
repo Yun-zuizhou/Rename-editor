@@ -4,23 +4,24 @@
   只写 HKCU / 当前用户证书 / 当前用户 Appx，不需要管理员权限。
 
   用法：
-    powershell -ExecutionPolicy Bypass -File .\Install.ps1
-    powershell -ExecutionPolicy Bypass -File .\Install.ps1 -ClassicVerbs   # 额外注册经典菜单项（显示在「显示更多选项」里）
-    powershell -ExecutionPolicy Bypass -File .\Install.ps1 -SkipPackage    # 只装经典菜单项，不碰 MSIX
+    powershell -ExecutionPolicy Bypass -File .\scripts\Install.ps1
+    powershell -ExecutionPolicy Bypass -File .\scripts\Install.ps1 -ClassicVerbs   # 额外注册经典菜单项（显示在「显示更多选项」里）
+    powershell -ExecutionPolicy Bypass -File .\scripts\Install.ps1 -SkipPackage    # 只装经典菜单项，不注册新式菜单
 #>
 [CmdletBinding()]
 param(
-    [switch]$ClassicVerbs,
-    [switch]$SkipPackage,
-    [switch]$NoCopy
+    [switch]$ClassicVerbs,     # 额外注册经典菜单项（出现在「显示更多选项」里）
+    [switch]$SkipPackage,      # 不注册新式一级菜单，只写经典项
+    [switch]$ClassicMenu,      # 让资源管理器整体回到 Win10 风格的经典菜单
+    [switch]$NoCopy            # 不复制文件，直接用仓库里的 exe
 )
 
 $ErrorActionPreference = 'Stop'
 
-$root       = Split-Path -Parent $MyInvocation.MyCommand.Path
-$srcExe     = Join-Path $root 'dist\BatchRename.exe'
-$srcDll     = Join-Path $root 'shell\dist\DSHBRShell.dll'
-$srcManifest = Join-Path $root 'msix\AppxManifest.xml'
+$root        = Split-Path -Parent $PSScriptRoot      # scripts\ 的上一层
+$srcExe      = Join-Path $root 'dist\BatchRename.exe'
+$srcDll      = Join-Path $root 'dist\DSHBRShell.dll'
+$srcManifest = Join-Path $root 'package\AppxManifest.xml'
 $installDir = Join-Path $env:LOCALAPPDATA 'Programs\DSHBatchRename'
 $exe        = Join-Path $installDir 'BatchRename.exe'
 $dll        = Join-Path $installDir 'Shell\DSHBRShell.dll'
@@ -30,7 +31,7 @@ Write-Host '== 批量重命名 · 安装 ==' -ForegroundColor Cyan
 # ---------------------------------------------------------------- 1. 复制文件
 if (-not $NoCopy) {
     if (-not (Test-Path -LiteralPath $srcExe)) {
-        throw "找不到 $srcExe —— 请先运行 powershell -ExecutionPolicy Bypass -File .\Build.ps1 编译。"
+        throw "找不到 $srcExe —— 请先运行 powershell -ExecutionPolicy Bypass -File .\scripts\Build.ps1 编译。"
     }
     New-Item -ItemType Directory -Force -Path $installDir, (Split-Path -Parent $dll) | Out-Null
     Copy-Item -LiteralPath $srcExe -Destination $exe -Force
@@ -48,17 +49,17 @@ if (-not $NoCopy) {
 $packageOk = $false
 if (-not $SkipPackage) {
     if (-not (Test-Path -LiteralPath $srcManifest)) {
-        Write-Host '  跳过新式菜单：未找到 msix\AppxManifest.xml' -ForegroundColor DarkYellow
+        Write-Host '  跳过新式菜单：未找到 package\AppxManifest.xml' -ForegroundColor DarkYellow
     } elseif (-not (Test-Path -LiteralPath $dll)) {
-        Write-Host '  跳过新式菜单：未找到 shell\dist\DSHBRShell.dll（先运行 shell\Build-Shell.ps1）' -ForegroundColor DarkYellow
+        Write-Host '  跳过新式菜单：未找到 dist\DSHBRShell.dll（先运行 scripts\Build-Shell.ps1）' -ForegroundColor DarkYellow
     } else {
         # 松散文件注册：安装目录本身就是包目录，清单和资产复制进去即可，无需签名
         Copy-Item -LiteralPath $srcManifest -Destination (Join-Path $installDir 'AppxManifest.xml') -Force
-        $srcAssets = Join-Path $root 'msix\stage\Assets'
+        $srcAssets = Join-Path $root 'package\Assets'
         if (Test-Path -LiteralPath $srcAssets) {
             Copy-Item -LiteralPath $srcAssets -Destination $installDir -Recurse -Force
         }
-        $register = Join-Path $root 'tools\Register-LoosePackage.ps1'
+        $register = Join-Path $root 'scripts\Register-LoosePackage.ps1'
         & powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass `
             -File $register -ManifestPath (Join-Path $installDir 'AppxManifest.xml')
         if ($LASTEXITCODE -ne 0) { throw "新式菜单注册失败: $LASTEXITCODE" }
@@ -89,6 +90,16 @@ if ($ClassicVerbs) {
         $k.Close()
         Write-Host ("  经典菜单项: " + $v.Key)
     }
+}
+
+# ---------------------------------------------------------------- 3.5 恢复 Win10 经典菜单（可选）
+if ($ClassicMenu) {
+    $cu = [Microsoft.Win32.Registry]::CurrentUser
+    $k = $cu.CreateSubKey('Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32')
+    if ($null -eq $k) { throw '无法写入 CLSID 键' }
+    $k.SetValue('', '')
+    $k.Close()
+    Write-Host '  已切换为 Win10 经典右键菜单（Uninstall.ps1 会还原）'
 }
 
 # 通知资源管理器刷新关联（失败不影响安装结果）

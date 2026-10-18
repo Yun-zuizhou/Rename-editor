@@ -14,11 +14,11 @@ jobs:
 
       - name: 编译并跑自测
         shell: powershell
-        run: .\Build.ps1 -RunSelfTest
+        run: .\scripts\Build.ps1 -RunSelfTest
 
       - name: 打包单文件安装器
         shell: powershell
-        run: .\setup\Build-Setup.ps1
+        run: .\scripts\Build-Setup.ps1
 
       - name: 上传 exe
         uses: actions/upload-artifact@v4

@@ -2,8 +2,9 @@
 # 依赖：VS 2026 的 MSVC + D:\Windows Kits\10 的 Windows SDK
 # 直接设置 INCLUDE/LIB 环境变量后调用 cl.exe，不经过 vcvars（规避 cmd 引号问题）
 $ErrorActionPreference = 'Stop'
-$root = $PSScriptRoot
-$build = Join-Path $root 'build'
+$root = Split-Path -Parent $PSScriptRoot       # scripts\ 的上一层
+$src = Join-Path $root 'src\shell'
+$build = Join-Path $root 'build\shell'
 $out = Join-Path $root 'dist'
 New-Item -ItemType Directory -Force -Path $build, $out | Out-Null
 
@@ -44,10 +45,10 @@ $dll = Join-Path $out 'DSHBRShell.dll'
 if (Test-Path $dll) { Remove-Item $dll -Force }
 
 "SDK $v | MSVC $($msvc.Name)"
-& $rc /nologo /fo $resFile (Join-Path $root 'resources.rc')
+& $rc /nologo /fo $resFile (Join-Path $src 'resources.rc')
 if ($LASTEXITCODE -ne 0) { throw "rc 编译失败: $LASTEXITCODE" }
 
-Push-Location $root
+Push-Location $src
 try {
     & $cl /nologo /LD /MT /O2 /EHsc /std:c++17 /utf-8 /DUNICODE /D_UNICODE /W3 `
         "/Fo$build\\" ShellCommand.cpp $resFile /link /DLL /EXPORT:DllGetClassObject /EXPORT:DllCanUnloadNow "/OUT:$dll" `

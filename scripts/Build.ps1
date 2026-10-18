@@ -1,6 +1,6 @@
 ﻿<#
     Build.ps1 — 编译 BatchRename.exe
-    用法: powershell -ExecutionPolicy Bypass -File Build.ps1
+    用法: powershell -ExecutionPolicy Bypass -File .\scripts\Build.ps1
     说明: 用 .NET Framework 自带的 csc.exe 编译，无需安装任何 SDK。
 #>
 [CmdletBinding()]
@@ -9,9 +9,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$srcDir = Join-Path $root 'src'
+# 脚本放在 scripts\ 下，仓库根目录是它的上一层
+$root = Split-Path -Parent $PSScriptRoot
+$srcDir = Join-Path $root 'src\app'
 $distDir = Join-Path $root 'dist'
+$buildDir = Join-Path $root 'build'
 $out = Join-Path $distDir 'BatchRename.exe'
 
 $manifest = Join-Path $srcDir 'app.manifest'
@@ -60,7 +62,8 @@ $fi = Get-Item -LiteralPath $out
 Write-Host ("编译成功: {0} ({1:N0} 字节)" -f $fi.FullName, $fi.Length) -ForegroundColor Green
 
 if ($RunSelfTest) {
-    $logFile = Join-Path $root '_selftest.txt'
+    New-Item -ItemType Directory -Force -Path $buildDir | Out-Null
+    $logFile = Join-Path $buildDir '_selftest.txt'
     if (Test-Path -LiteralPath $logFile) { Remove-Item -LiteralPath $logFile -Force }
     # 注意：沙箱里 Start-Process -Wait 会永久挂起；winexe 用 & 调用又不会等待，
     # 因此改为「启动 + 轮询结果文件」。

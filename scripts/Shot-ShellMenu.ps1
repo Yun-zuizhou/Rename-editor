@@ -1,5 +1,5 @@
 ﻿param(
-  [string]$Out = (Join-Path (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)) 'build\menu.png'),
+  [string]$Out = (Join-Path (Split-Path -Parent $PSScriptRoot) '..\build\menu.png'),
   [ValidateSet('files','folder')][string]$Mode = 'files',
   [string]$FolderTitle = 'demo'
 )
