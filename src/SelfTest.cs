@@ -54,7 +54,7 @@ namespace DshBatchRename
                 TestInvalid(root);
                 TestDirectory(root);
                 TestManualName(root);
-                TestFreeMode(root);
+
                 TestMixedManual(root);
             }
             catch (Exception ex)
@@ -339,26 +339,6 @@ namespace DshBatchRename
             int n = Engine.Apply(items, out msg);
             Check("手动改名应用数", n == 3, "n=" + n.ToString(CultureInfo.InvariantCulture) + " msg=" + msg);
             Expect("手动改名与序号并存", d, "a_01.txt", "特殊 名字.txt", "c_02.txt");
-        }
-
-        // 自由命名模式：没手改的行保持原名
-        private static void TestFreeMode(string root)
-        {
-            string d = Dir(root, "t15");
-            Touch(d, "x.txt", "y.txt");
-            Rule r = SeqRule();
-            r.Mode = RenameMode.Free;
-            List<RenameItem> items = Engine.Load(Directory.GetFileSystemEntries(d));
-            Engine.Build(items, r);
-            int will = 0;
-            foreach (RenameItem it in items) if (it.Runnable) will++;
-            Check("自由命名模式默认不产生改动", will == 0, "will=" + will.ToString(CultureInfo.InvariantCulture));
-            foreach (RenameItem it in items) if (it.OldName == "y.txt") { it.Manual = true; it.ManualName = "只改这一条.txt"; }
-            Engine.Build(items, r);
-            string msg;
-            int n = Engine.Apply(items, out msg);
-            bool ok = n == 1 && File.Exists(Path.Combine(d, "只改这一条.txt")) && File.Exists(Path.Combine(d, "x.txt"));
-            Check("自由命名只改手写的那条", ok, "n=" + n.ToString(CultureInfo.InvariantCulture) + " msg=" + msg);
         }
 
         // 从别的模式切回自由命名后，手写过的行仍然保留

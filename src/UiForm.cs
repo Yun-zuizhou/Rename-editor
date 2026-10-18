@@ -9,10 +9,20 @@ using System.Windows.Forms;
 
 namespace DshBatchRename
 {
-    // 主窗口：自绘 Fluent 风格（跟随系统深浅色）
+    /// <summary>
+    /// 主窗口：全自绘的 Fluent 风格面板（跟随系统深浅色）。
+    ///
+    /// 界面分四块，坐标都在 <see cref="LayoutAll"/> 里一次算好、缓存进 `_rcXxx` 字段：
+    ///   标题栏 → 规则分段控件 → 规则参数区（按模式切换）→ 预览列表 → 底部操作区。
+    /// 绘制入口是 <see cref="OnPaint"/>，它只读缓存的矩形，不再做布局计算。
+    ///
+    /// 数据流：输入框 / 芯片 / 分段控件 → <see cref="SaveRuleFromUi"/> 写进 `_rule`
+    ///        → <see cref="RefreshPreview"/> 调 `Engine.Build` → 列表重绘。
+    /// 手写名字保存在 `RenameItem.Manual` / `ManualName` 上，由 <see cref="RowEditor"/> 录入。
+    /// </summary>
     internal class RenameForm : ShellForm
     {
-        private const int ModeSequence = 0, ModeReplace = 1, ModeAffix = 2, ModeCase = 3, ModeFree = 4;
+        private const int ModeSequence = 0, ModeReplace = 1, ModeAffix = 2, ModeCase = 3;
 
         private readonly List<RenameItem> _items;
         private readonly Rule _rule;
@@ -36,7 +46,7 @@ namespace DshBatchRename
 
         // 命中区域
         private Rectangle _rcClose, _rcUndo, _rcCancel, _rcApply, _rcSort, _rcCase, _rcRegex, _rcCaseSens;
-        private readonly Rectangle[] _rcChips = new Rectangle[5];
+        private readonly Rectangle[] _rcChips = new Rectangle[4];
         private Rectangle _rcList, _rcListHeader;
         private Rectangle _rcTplWell, _rcFindWell, _rcReplWell, _rcPrefixWell, _rcSuffixWell;
         private Rectangle _rcPreset;
@@ -46,10 +56,14 @@ namespace DshBatchRename
         private int _rowH, _listTop, _headerH;
 
         // 行内改名：双击某一行就在「新名称」列上盖一个输入框
-        private TextBox _edit;
-        private int _editIndex = -1;
+        private readonly RowEditor _rowEdit;   // 行内改名输入框（见 RowEditor.cs）
 
-        private static readonly string[] ModeNames = new string[] { "按序号", "查找替换", "加前缀后缀", "大小写清理", "自由命名" };
+        // 自己判双击：不依赖窗口类的 CS_DBLCLKS，MouseDoubleClick 在某些无边框窗口上不触发
+        private int _lastClickMs;
+        private int _lastClickRow = -1;
+        private int _lastClickX, _lastClickY;
+
+        private static readonly string[] ModeNames = new string[] { "按序号", "查找替换", "加前缀后缀", "大小写清理" };
         private static readonly string[] SortNames = new string[] { "名称（自然顺序）", "修改时间（旧→新）", "大小（小→大）", "保持选中顺序" };
         private static readonly string[] CaseNames = new string[] { "全部小写", "全部大写", "每词首字母大写", "清理非法字符", "空格转下划线" };
 
@@ -60,7 +74,7 @@ namespace DshBatchRename
 
         // 命中 id
         private const int IdNone = 0, IdClose = 1, IdChip = 10, IdSort = 20, IdCase = 21,
-            IdUndo = 30, IdCancel = 31, IdApply = 32, IdRegex = 33, IdCaseSens = 34, IdList = 40, IdRow = 200,
+            IdUndo = 30, IdCancel = 31, IdApply = 32, IdRegex = 33, IdCaseSens = 34, IdList = 40, IdRow = 200, IdRowEdit = 600,
             IdVar = 50, IdPreset = 60;
 
         public RenameForm(string[] files, Rule rule)
@@ -124,8 +138,18 @@ namespace DshBatchRename
             MouseDown += OnMouseDown;
             MouseUp += OnMouseUp;
             MouseWheel += OnWheel;
-            MouseDoubleClick += OnDoubleClick;
             MouseLeave += delegate { if (_hot != 0) { _hot = 0; Invalidate(); } };
+
+            _rowEdit = new RowEditor(this, _t);
+            _rowEdit.Commit += OnRowEditCommit;
+            _rowEdit.Cancel += OnRowEditCancel;
+
+            Shown += delegate
+            {
+                Dev.Log("shown shotEdit=" + Dev.ShotEdit() + " items=" + _items.Count);
+                if (Dev.ShotEdit() && _items.Count > 0)
+                    BeginInvoke((MethodInvoker)delegate { BeginRowEdit(0); });
+            };
 
             RefreshPreview();
         }
@@ -206,6 +230,11 @@ namespace DshBatchRename
         }
 
         // ---------------------------------------------------------------- 布局
+
+        /// <summary>
+        /// 计算并缓存所有可点区域。尺寸一律走 <see cref="U"/>（按真实 DPI 缩放），
+        /// 窗口尺寸/DPI 变化后必须重新调用——<see cref="OnPaint"/> 直接读这些矩形。
+        /// </summary>
         private void LayoutAll()
         {
             int pad = U(24);
@@ -219,7 +248,7 @@ namespace DshBatchRename
             // 规则分段
             int chipY = _headerH + U(14);
             int chipH = U(32);
-            int[] cw = new int[] { U(74), U(88), U(104), U(96), U(88) };
+            int[] cw = new int[] { U(74), U(88), U(104), U(96) };
             int cx = pad;
             for (int i = 0; i < cw.Length; i++)
             {
@@ -295,9 +324,7 @@ namespace DshBatchRename
 
             // 列表面板
             _rowH = U(34);
-            // 自由命名模式没有规则字段，列表直接顶上去，别留一大片空白
-            int headerY = _mode == ModeFree ? r1 + U(52) : r2 + r2h + U(30);
-            _rcListHeader = new Rectangle(0, headerY, w, U(28));
+            _rcListHeader = new Rectangle(0, r2 + r2h + U(30), w, U(28));
             _listTop = _rcListHeader.Bottom;
             int bottomH = U(70);
             _rcList = new Rectangle(0, _listTop, w, Math.Max(U(60), ClientSize.Height - bottomH - _listTop));
@@ -316,8 +343,8 @@ namespace DshBatchRename
             if (_mode != ModeReplace) { _find.Visible = false; _repl.Visible = false; }
             if (_mode != ModeAffix) { _prefix.Visible = false; _suffix.Visible = false; }
 
-            // 布局变了，行内输入框跟着收起来，免得浮在错的位置
-            if (_editIndex >= 0) { _editIndex = -1; if (_edit != null) _edit.Visible = false; }
+            // 布局变了，把行内输入框重新摆到当前行上（不要直接收掉）
+            if (_rowEdit.Active) PlaceEdit();
         }
 
         private void PlaceBoxes(Rectangle tpl, Rectangle find, Rectangle repl, Rectangle prefix, Rectangle suffix,
@@ -359,13 +386,12 @@ namespace DshBatchRename
             _rule.Mode = _mode == ModeSequence ? RenameMode.Sequence
                 : _mode == ModeReplace ? RenameMode.Replace
                 : _mode == ModeAffix ? RenameMode.Affix
-                : _mode == ModeFree ? RenameMode.Free
                 : RenameMode.Case;
         }
 
         private void SaveRuleFromUi()
         {
-            _rule.Mode = (RenameMode)(_mode == ModeSequence ? 0 : _mode == ModeReplace ? 1 : _mode == ModeAffix ? 2 : _mode == ModeFree ? 4 : 3);
+            _rule.Mode = (RenameMode)(_mode == ModeSequence ? 0 : _mode == ModeReplace ? 1 : _mode == ModeAffix ? 2 : 3);
             _rule.Template = _tpl.Text;
             _rule.Find = _find.Text;
             _rule.ReplaceWith = _repl.Text;
@@ -395,6 +421,10 @@ namespace DshBatchRename
         }
 
         // ---------------------------------------------------------------- 预览
+        /// <summary>
+        /// 规则变了以后重算预览：保存界面 → `Engine.Build` 重算每行的新名字与冲突状态 → 重绘。
+        /// 输入框的 TextChanged 会经过 180ms 防抖再走到这里，避免每敲一个字都全量重算。
+        /// </summary>
         private void RefreshPreview()
         {
             if (_loading) return;
@@ -574,12 +604,7 @@ namespace DshBatchRename
                     new Rectangle(_rcCase.X + U(12), _rcCase.Y, _rcCase.Width - U(34), _rcCase.Height), D.LeftEll);
                 D.Txt(g, "▾", F.Get(8f, false), _t.Sub, new Rectangle(_rcCase.Right - U(24), _rcCase.Y, U(18), _rcCase.Height), D.Center);
             }
-            else if (_mode == ModeFree)
-            {
-                D.Txt(g, "双击下面的文件名（或按 F2）直接写名字；手写过的行不再受规则影响",
-                    F.Get(9.2f, false), _t.Sub,
-                    new Rectangle(pad, _rcSort.Y, Math.Max(U(200), _rcSort.X - pad - U(16)), _rcSort.Height), D.LeftEll);
-            }
+
         }
 
         private void DrawRuleRow2(Graphics g)
@@ -663,8 +688,8 @@ namespace DshBatchRename
             int pad = U(24);
             D.HLine(g, 0, ClientSize.Width, _rcListHeader.Y, _t.Line);
             int colOld = pad;
-            int colNew = (int)(ClientSize.Width * 0.40);
-            int colStatus = (int)(ClientSize.Width * 0.80);
+            int colNew = ColNew();
+            int colStatus = ColStatus();
 
             D.Txt(g, "原名称", F.Get(8.8f, false), _t.Sub, new Rectangle(colOld, _rcListHeader.Y, U(200), _rcListHeader.Height), D.Left);
             D.Txt(g, "新名称", F.Get(8.8f, false), _t.Sub, new Rectangle(colNew, _rcListHeader.Y, U(200), _rcListHeader.Height), D.Left);
@@ -725,6 +750,21 @@ namespace DshBatchRename
                 else if (it.Manual)
                     D.Txt(g, "手动", F.Get(8.6f, false), _t.Accent,
                         new Rectangle(colStatus, y, ClientSize.Width - colStatus - U(16), _rowH), D.LeftEll);
+
+                if (_hot == IdRow + i || _hot == IdRowEdit + i)
+                {
+                    Rectangle pill = RowEditRect(y);
+                    D.Fill(g, pill, U(6), _t.AccentSoft);
+                    D.Stroke(g, new RectangleF(pill.X + 0.5f, pill.Y + 0.5f, pill.Width - 1, pill.Height - 1), U(6), _t.Accent, 1f);
+                    D.Txt(g, "改名", F.Get(8.6f, false), _t.Accent, pill, D.Center);
+                }
+                if (_rowEdit.Index == i && _rowEdit.Visible)
+                {
+                    // 用输入框自己的位置画一圈强调色，和它严丝合缝
+                    Rectangle eb = _rowEdit.Bounds;
+                    eb.Inflate(U(3), U(3));
+                    D.Stroke(g, new RectangleF(eb.X + 0.5f, eb.Y + 0.5f, eb.Width - 1, eb.Height - 1), U(6), _t.Accent, 1.5f);
+                }
             }
 
             g.ResetClip();
@@ -759,7 +799,9 @@ namespace DshBatchRename
             _rcUndo.Width = undoW;
             D.Txt(g, undoText, F.Get(9.2f, false), undoColor, _rcUndo, D.Left);
 
-            string hint = "Enter 应用 · Esc 取消 · Ctrl+Z 撤销 · 双击行单独改名";
+            string hint = _rowEdit.Active
+                ? ("正在改第 " + (_rowEdit.Index + 1).ToString(CultureInfo.InvariantCulture) + " 行 · Enter 确认并跳下一行 · Esc 或点空白处放弃")
+                : "双击某一行（或选中后按 F2）就能单独改名 · Enter 应用 · Esc 取消";
             int hintX = _rcUndo.Right + U(24);
             D.Txt(g, hint, F.Get(8.6f, false), _t.Sub,
                 new Rectangle(hintX, _rcUndo.Y, Math.Max(U(60), _rcCancel.X - hintX - U(16)), _rcUndo.Height), D.LeftEll);
@@ -782,6 +824,11 @@ namespace DshBatchRename
         }
 
         // ---------------------------------------------------------------- 命中
+        /// <summary>
+        /// 命中测试：把客户区坐标翻译成 <see cref="IdNone"/> 之类的语义 id。
+        /// 行的 id 用 `IdRow + 行号`（从 200 起），行尾「改名」按钮用 `IdRowEdit + 行号`（从 600 起），
+        /// 这样两者不会和按钮类 id 撞车。
+        /// </summary>
         private int Hit(Point p)
         {
             if (_rcClose.Contains(p)) return IdClose;
@@ -801,7 +848,12 @@ namespace DshBatchRename
             if (_rcList.Contains(p))
             {
                 int idx = _scroll + (p.Y - _rcList.Y) / Math.Max(1, _rowH);
-                if (idx >= 0 && idx < _items.Count) return IdRow + idx;
+                if (idx >= 0 && idx < _items.Count)
+                {
+                    int ry = _rcList.Y + (idx - _scroll) * _rowH;
+                    if (RowEditRect(ry).Contains(p)) return IdRowEdit + idx;
+                    return IdRow + idx;
+                }
                 return IdList;
             }
             return IdNone;
@@ -813,23 +865,83 @@ namespace DshBatchRename
             if (h >= IdRow)
             {
                 // 行热区不显示悬停底，避免和选中混淆；只保留手型
-                if (_hot != h) { _hot = h; Cursor = Cursors.Default; Invalidate(); }
+                if (_hot != h)
+                {
+                    int old = _hot;
+                    _hot = h;
+                    Cursor = Cursors.Default;
+                    InvalidateRow(old);   // 只重绘进出悬停的两行，避免整窗重绘
+                    InvalidateRow(h);
+                }
                 return;
             }
             if (h != _hot)
             {
+                int old = _hot;
                 _hot = h;
                 Cursor = (h == IdNone) ? Cursors.Default : Cursors.Hand;
-                Invalidate();
+                InvalidateRow(old);
+                InvalidateRow(h);
+                if (old < IdRow && h < IdRow) Invalidate();   // 按钮类热区：整窗重绘
             }
+        }
+
+        /// <summary>只重绘某一行（悬停/选中变化时用）。传入行相关的命中 id，其它 id 忽略。</summary>
+        private void InvalidateRow(int id)
+        {
+            int idx;
+            if (id >= IdRowEdit) idx = id - IdRowEdit;
+            else if (id >= IdRow) idx = id - IdRow;
+            else return;
+
+            if (idx < 0 || idx >= _items.Count) return;
+            int y = _rcList.Y + (idx - _scroll) * _rowH;
+            if (y + _rowH <= _rcList.Y || y >= _rcList.Bottom) return;
+            Invalidate(new Rectangle(0, y, ClientSize.Width, _rowH));
         }
 
         private void OnMouseDown(object sender, MouseEventArgs e)
         {
+            // 右键：把这一批从改名范围里排除 / 恢复（引擎早就支持 Excluded，这里补上入口）
+            if (e.Button == MouseButtons.Right)
+            {
+                int hr = Hit(e.Location);
+                if (hr < IdRow) return;
+                int idxR = hr >= IdRowEdit ? hr - IdRowEdit : hr - IdRow;
+                if (idxR >= 0 && idxR < _items.Count && !_sel.Contains(_items[idxR]))
+                {
+                    _sel.Clear();
+                    _sel.Add(_items[idxR]);
+                    _selAnchor = idxR;
+                }
+                bool allExcluded = _sel.Count > 0;
+                foreach (RenameItem s in _sel) if (!s.Excluded) { allExcluded = false; break; }
+                SetExcluded(!allExcluded);
+                return;
+            }
             if (e.Button != MouseButtons.Left) return;
             int h = Hit(e.Location);
+
+            // 正在改某一行时，点别处先收尾：点另一行=保留这次改动，点空白/其它控件=放弃这次改动
+            if (_rowEdit.Active)
+            {
+                if (h >= IdRowEdit)
+                {
+                    OnRowEditCommit(false);
+                    BeginRowEdit(h - IdRowEdit);
+                    return;
+                }
+                if (h >= IdRow) OnRowEditCommit(false);
+                else OnRowEditCancel();
+            }
+
             _pressed = true;
             _pressedId = h;
+            if (h >= IdRowEdit)
+            {
+                BeginRowEdit(h - IdRowEdit);
+                return;
+            }
             if (h >= IdRow)
             {
                 RenameItem it = _items[h - IdRow];
@@ -853,6 +965,21 @@ namespace DshBatchRename
                     _sel.Add(it);
                     _selAnchor = idx;
                 }
+
+                // 同一行、同一处、两下 → 进改名（双击时间间隔取系统设置）
+                int now = Environment.TickCount;
+                if (idx == _lastClickRow && _lastClickRow >= 0
+                    && now - _lastClickMs <= SystemInformation.DoubleClickTime
+                    && Math.Abs(e.X - _lastClickX) <= U(4) && Math.Abs(e.Y - _lastClickY) <= U(4))
+                {
+                    _lastClickRow = -1;
+                    BeginRowEdit(idx);
+                    return;
+                }
+                _lastClickMs = now;
+                _lastClickRow = idx;
+                _lastClickX = e.X;
+                _lastClickY = e.Y;
                 Invalidate();
             }
         }
@@ -876,7 +1003,7 @@ namespace DshBatchRename
                 case IdPreset: OpenPreset(); break;
                 default:
                     if (h >= IdVar && h < IdVar + 4) InsertToken(VarTokens[h - IdVar]);
-                    else if (h >= IdChip && h <= IdChip + 4)
+                    else if (h >= IdChip && h <= IdChip + 3)
                     {
                         _mode = h - IdChip;
                         ApplyModeToRule();
@@ -902,67 +1029,68 @@ namespace DshBatchRename
         }
 
         // ---------------------------------------------------------------- 行内改名
-        private TextBox EnsureEdit()
-        {
-            if (_edit != null) return _edit;
-            TextBox b = new TextBox();
-            b.BorderStyle = BorderStyle.None;
-            b.Font = F.Get(9.2f, false);
-            b.ForeColor = _t.Text;
-            b.BackColor = _t.Input;
-            b.Visible = false;
-            b.KeyDown += delegate(object s, KeyEventArgs e)
-            {
-                if (e.KeyCode == Keys.Enter)
-                {
-                    e.SuppressKeyPress = true;
-                    int next = CommitEdit(true);
-                    if (next >= 0) BeginRowEdit(next);
-                }
-                else if (e.KeyCode == Keys.Escape || e.KeyCode == Keys.F2)
-                {
-                    e.SuppressKeyPress = true;
-                    CancelEdit();
-                }
-            };
-            b.LostFocus += delegate { if (_editIndex >= 0) CommitEdit(false); };
-            Controls.Add(b);
-            _edit = b;
-            return b;
-        }
 
+        // 「新名称」「状态」两列的位置按客户区宽度取比例，缩放后仍对齐
+        private const float ColNewRatio = 0.40f;
+        private const float ColStatusRatio = 0.80f;
+
+        /// <summary>「新名称」列的起点。</summary>
+        private int ColNew() { return (int)(ClientSize.Width * ColNewRatio); }
+
+        /// <summary>「状态」列的起点。</summary>
+        private int ColStatus() { return (int)(ClientSize.Width * ColStatusRatio); }
+
+        /// <summary>
+        /// 进入某一行的改名状态：必要时先把这行滚进可视区，再把输入框摆上去。
+        /// 三个入口都走这里——双击行、F2/F12、行尾的「改名」按钮。
+        /// </summary>
         private void BeginRowEdit(int index)
         {
             if (index < 0 || index >= _items.Count) return;
-            TextBox ed = EnsureEdit();
+
             int visible = Math.Max(1, _rcList.Height / Math.Max(1, _rowH));
             if (index < _scroll) _scroll = index;
             else if (index >= _scroll + visible) _scroll = Math.Max(0, index - visible + 1);
 
-            _editIndex = index;
             RenameItem it = _items[index];
-            ed.Text = string.IsNullOrEmpty(it.NewName) ? it.OldName : it.NewName;
-
-            int y = _rcList.Y + (index - _scroll) * _rowH;
-            int colNew = (int)(ClientSize.Width * 0.40);
-            int colStatus = (int)(ClientSize.Width * 0.80);
-            int h = ed.PreferredHeight;
-            ed.SetBounds(colNew + U(4), y + (_rowH - h) / 2, Math.Max(U(80), colStatus - colNew - U(16)), h);
-            ed.Visible = true;
-            ed.BringToFront();
-            ed.Focus();
-            ed.SelectAll();
+            Dev.Log("beginEdit idx=" + index + " new=" + (it.NewName ?? "<null>") + " old=" + (it.OldName ?? "<null>"));
+            _rowEdit.Begin(index, string.IsNullOrEmpty(it.NewName) ? it.OldName : it.NewName);
+            PlaceEdit();
+            _rowEdit.FocusAndSelect();
             Invalidate();
         }
 
-        private int CommitEdit(bool moveNext)
+        /// <summary>把输入框摆到当前编辑行上；该行滚出可视区时只隐藏输入框，保留编辑状态。</summary>
+        private void PlaceEdit()
         {
-            if (_edit == null || _editIndex < 0) return -1;
-            int idx = _editIndex;
-            _editIndex = -1;
-            _edit.Visible = false;
+            if (!_rowEdit.Active || _rowEdit.Index >= _items.Count) return;
+
+            int visible = Math.Max(1, _rcList.Height / Math.Max(1, _rowH));
+            if (_rowEdit.Index < _scroll || _rowEdit.Index >= _scroll + visible)
+            {
+                _rowEdit.HideBox();
+                return;
+            }
+
+            int y = _rcList.Y + (_rowEdit.Index - _scroll) * _rowH;
+            int colNew = ColNew();
+            int colStatus = ColStatus();
+            _rowEdit.Place(colNew + U(6), y, colStatus - colNew - U(18), _rowH);
+        }
+
+        /// <summary>
+        /// 提交改名。空内容、或跟原名一样，都算放弃手写，那一行交还给规则。
+        /// moveNext 为 true 时自动接着改下一行（连续改名）。
+        /// </summary>
+        private void OnRowEditCommit(bool moveNext)
+        {
+            int idx = _rowEdit.Index;
+            if (idx < 0) return;
+
+            string txt = (_rowEdit.Text ?? string.Empty).Trim();
+            _rowEdit.Hide();
+
             RenameItem it = _items[idx];
-            string txt = (_edit.Text == null ? string.Empty : _edit.Text).Trim();
             if (txt.Length == 0 || string.Equals(txt, it.OldName, StringComparison.Ordinal))
             {
                 it.Manual = false;
@@ -973,26 +1101,25 @@ namespace DshBatchRename
                 it.Manual = true;
                 it.ManualName = txt;
             }
+
             _sel.Clear();
             _sel.Add(it);
             _selAnchor = idx;
             RefreshPreview();
-            if (moveNext && idx + 1 < _items.Count) return idx + 1;
-            return -1;
+            Invalidate();
+
+            if (moveNext && idx + 1 < _items.Count) BeginRowEdit(idx + 1);
         }
 
-        private void CancelEdit()
+        /// <summary>放弃这次改名（Esc、点空白处、或编辑中再按 F2）。</summary>
+        private void OnRowEditCancel()
         {
-            if (_edit == null) return;
-            _editIndex = -1;
-            _edit.Visible = false;
+            _rowEdit.Hide();
             Invalidate();
         }
-
-        private void OnDoubleClick(object sender, MouseEventArgs e)
+        private Rectangle RowEditRect(int rowY)
         {
-            int h = Hit(e.Location);
-            if (h >= IdRow) BeginRowEdit(h - IdRow);
+            return new Rectangle(ClientSize.Width - U(92), rowY + (_rowH - U(26)) / 2, U(68), U(26));
         }
 
         private void OpenSort()
@@ -1050,6 +1177,10 @@ namespace DshBatchRename
         }
 
         // ---------------------------------------------------------------- 动作
+        /// <summary>
+        /// 追加一批文件（拖进窗口、或打开窗口后再选）。按完整路径去重，
+        /// 已有的手写名字不受影响——所以可以分几批挑文件、最后一次性改名。
+        /// </summary>
         private void AddPaths(string[] paths)
         {
             List<RenameItem> more = Engine.Load(paths);
@@ -1059,12 +1190,17 @@ namespace DshBatchRename
             RefreshPreview();
         }
 
+        /// <summary>把当前选中行设为「不参与改名」，再点一次恢复正常。</summary>
         private void SetExcluded(bool excluded)
         {
             foreach (RenameItem it in _sel) it.Excluded = excluded;
             RefreshPreview();
         }
 
+        /// <summary>
+        /// 应用改名。冲突时 `Engine.Apply` 返回负数且什么都不做；
+        /// 成功后弹一条带「撤销」的提示（窗口自己会关掉）。
+        /// </summary>
         private void OnApply()
         {
             if (_loading) return;
@@ -1122,15 +1258,25 @@ namespace DshBatchRename
             Close();
         }
 
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.F2 || e.KeyCode == Keys.F12)
+            {
+                if (_items.Count > 0) BeginRowEdit(_selAnchor >= 0 ? _selAnchor : 0);
+                e.Handled = true;
+                return;
+            }
+            base.OnKeyDown(e);
+        }
+
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
             if (keyData == Keys.Escape) { OnCancel(); return true; }
             if (keyData == Keys.Enter) { OnApply(); return true; }
             if (keyData == (Keys.Control | Keys.Z)) { OnUndo(); return true; }
-            if (keyData == Keys.F2)
+            if (keyData == Keys.F2 || keyData == Keys.F12)
             {
-                if (_selAnchor >= 0) BeginRowEdit(_selAnchor);
-                else if (_items.Count > 0) BeginRowEdit(0);
+                if (_items.Count > 0) BeginRowEdit(_selAnchor >= 0 ? _selAnchor : 0);
                 return true;
             }
             return base.ProcessCmdKey(ref msg, keyData);

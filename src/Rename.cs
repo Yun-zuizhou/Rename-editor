@@ -16,8 +16,7 @@ namespace DshBatchRename
         Sequence = 0,
         Replace = 1,
         Affix = 2,
-        Case = 3,
-        Free = 4              // 自由命名：每一条自己写名字，规则不参与计算
+        Case = 3
     }
 
     internal static class AppInfo

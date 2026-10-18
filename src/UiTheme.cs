@@ -71,10 +71,7 @@ namespace DshBatchRename
             return SystemDark() ? CreateDark() : CreateLight();
         }
 
-        public static void Reload()
-        {
-            _current = Load();
-        }
+
 
         public static Theme CreateLight()
         {
@@ -125,36 +122,82 @@ namespace DshBatchRename
         }
     }
 
-    // 字体缓存（避免每帧 new Font）
+    /// <summary>
+    /// 字体缓存。自绘界面每帧要用到十几种字号/字重，new Font 很贵，
+    /// 这里按「字号 × 字重」缓存，进程生命周期内复用。
+    /// </summary>
     internal static class F
     {
-        private static readonly Dictionary<string, Font> Cache = new Dictionary<string, Font>();
+        private const string Family = "Microsoft YaHei UI";
 
+        // key = 字号(×10 取整) * 4 + 字重，避免每次拼字符串
+        private static readonly Dictionary<int, Font> Cache = new Dictionary<int, Font>();
+
+        /// <summary>取正体或粗体。</summary>
         public static Font Get(float pt, bool bold)
         {
             return Get(pt, bold ? FontStyle.Bold : FontStyle.Regular);
         }
 
+        /// <summary>取指定字重的字体（缺字体时退回系统无衬线字体，不会抛）。</summary>
         public static Font Get(float pt, FontStyle style)
         {
-            string key = pt.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "/" + (int)style;
+            int key = ((int)Math.Round(pt * 10)) * 4 + (int)style;
             Font f;
             if (Cache.TryGetValue(key, out f) && f != null) return f;
-            try { f = new Font("Microsoft YaHei UI", pt, style, GraphicsUnit.Point); }
+            try { f = new Font(Family, pt, style, GraphicsUnit.Point); }
             catch (Exception) { f = new Font(FontFamily.GenericSansSerif, pt, style, GraphicsUnit.Point); }
             Cache[key] = f;
             return f;
         }
     }
 
-    // 绘图原语
+    /// <summary>
+    /// 绘图原语。所有方法都是「一次调用画完一个形状」，内部缓存 GDI+ 的
+    /// Brush / Pen / 文本尺寸，避免每次重绘都重新分配——列表滚动时一帧要画上百个原语。
+    /// </summary>
     internal static class D
     {
+        // ---- 文本垂直居中 + 不额外留白，作为所有文本调用的基准 ----
         public const TextFormatFlags Left = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
         public const TextFormatFlags LeftEll = Left | TextFormatFlags.EndEllipsis;
         public const TextFormatFlags Center = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
         public const TextFormatFlags Right = TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
 
+        private static readonly Dictionary<Color, SolidBrush> Brushes = new Dictionary<Color, SolidBrush>();
+        private static readonly Dictionary<long, Pen> Pens = new Dictionary<long, Pen>();
+        private static readonly Dictionary<long, Pen> InsetPens = new Dictionary<long, Pen>();
+        private static readonly Dictionary<string, Size> Measures = new Dictionary<string, Size>();
+
+        /// <summary>缓存画刷（颜色种类有限，可以直接常驻）。</summary>
+        private static SolidBrush BrushOf(Color c)
+        {
+            SolidBrush b;
+            if (Brushes.TryGetValue(c, out b)) return b;
+            b = new SolidBrush(c);
+            Brushes[c] = b;
+            return b;
+        }
+
+        private static long PenKey(Color c, float w)
+        {
+            return ((long)c.ToArgb() << 8) | (long)Math.Round(w * 10);
+        }
+
+        /// <summary>缓存画笔。注：调用方不要修改返回的 Pen 属性。</summary>
+        private static Pen PenOf(Color c, float w, bool inset)
+        {
+            long key = PenKey(c, w);
+            Dictionary<long, Pen> box = inset ? InsetPens : Pens;
+            Pen p;
+            if (box.TryGetValue(key, out p)) return p;
+            p = new Pen(c, w);
+            if (inset) p.Alignment = PenAlignment.Inset;
+            box[key] = p;
+            return p;
+        }
+
+        /// <summary>圆角矩形路径（半径 &gt; 0.5 才算圆角）。调用方负责 Dispose。</summary>
         public static GraphicsPath Round(RectangleF r, float radius)
         {
             GraphicsPath p = new GraphicsPath();
@@ -170,52 +213,62 @@ namespace DshBatchRename
             return p;
         }
 
+        /// <summary>填充圆角矩形。</summary>
         public static void Fill(Graphics g, RectangleF r, float radius, Color c)
         {
             if (r.Width <= 0 || r.Height <= 0) return;
             using (GraphicsPath p = Round(r, radius))
-            using (SolidBrush b = new SolidBrush(c))
-                g.FillPath(b, p);
+                g.FillPath(BrushOf(c), p);
         }
 
+        /// <summary>描边圆角矩形（会画在矩形边界内侧一点，避免被裁掉半像素）。</summary>
         public static void Stroke(Graphics g, RectangleF r, float radius, Color c, float w)
         {
             if (r.Width <= 0 || r.Height <= 0) return;
             using (GraphicsPath p = Round(r, radius))
-            using (Pen pen = new Pen(c, w))
-                g.DrawPath(pen, p);
+                g.DrawPath(PenOf(c, w, false), p);
         }
 
+        /// <summary>1px 水平分隔线。</summary>
         public static void HLine(Graphics g, float x1, float x2, float y, Color c)
         {
-            using (Pen pen = new Pen(c, 1f))
-            {
-                pen.Alignment = PenAlignment.Inset;
-                g.DrawLine(pen, x1, y, x2, y);
-            }
+            g.DrawLine(PenOf(c, 1f, true), x1, y, x2, y);
         }
 
+        /// <summary>画一行文字（单行，超出按 flags 处理）。</summary>
         public static void Txt(Graphics g, string s, Font f, Color c, Rectangle r, TextFormatFlags flags)
         {
-            if (s == null) s = string.Empty;
-            TextRenderer.DrawText(g, s, f, r, c, flags);
+            TextRenderer.DrawText(g, s == null ? string.Empty : s, f, r, c, flags);
         }
 
+        /// <summary>
+        /// 量文字宽度。带缓存：列表每行都要量一次「未变化的前缀」，
+        /// 不缓存的话滚动时会不停调 GDI 的文本测量。
+        /// </summary>
         public static Size Measure(string s, Font f)
         {
-            return TextRenderer.MeasureText(s == null ? string.Empty : s, f, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+            if (s == null) s = string.Empty;
+            string key = ((int)f.SizeInPoints).ToString() + "|" + (int)f.Style + "|" + s;
+            Size sz;
+            if (Measures.TryGetValue(key, out sz)) return sz;
+            sz = TextRenderer.MeasureText(s, f, new Size(int.MaxValue, int.MaxValue),
+                TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+            if (Measures.Count > 4096) Measures.Clear();   // 防止长会话里无限增长
+            Measures[key] = sz;
+            return sz;
         }
 
+        /// <summary>按比例混合两个颜色（t=0 取 a，t=1 取 b）。</summary>
         public static Color Mix(Color a, Color b, double t)
         {
-            if (t < 0) t = 0; if (t > 1) t = 1;
+            if (t < 0) t = 0;
+            if (t > 1) t = 1;
             return Color.FromArgb(
                 (int)(a.R + (b.R - a.R) * t),
                 (int)(a.G + (b.G - a.G) * t),
                 (int)(a.B + (b.B - a.B) * t));
         }
     }
-
     // 无系统边框的圆角窗口：自绘标题区、可拖动、可从四边缩放
     internal class ShellForm : Form
     {

@@ -99,12 +99,7 @@ namespace DshBatchRename
                     it.NewName = string.IsNullOrEmpty(it.ManualName) ? it.OldName : it.ManualName;
                     continue;
                 }
-                if (rule.Mode == RenameMode.Free)
-                {
-                    // 自由命名模式：没手改过的行保持原名
-                    it.NewName = it.OldName;
-                    continue;
-                }
+
                 string newBase = ComputeBase(it, rule, n);
                 it.NewName = BuildName(it, rule, newBase);
                 n += rule.Step;
@@ -312,20 +307,56 @@ namespace DshBatchRename
 
             HashSet<string> sources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (RenameItem it in items) if (it.Runnable) sources.Add(it.FullPath);
+
+            // 「目标是否已存在」原本每项探一次磁盘，一批几百个文件时每次刷新要几百次系统调用。
+            // 改名几乎都发生在同一两个目录里，改成「每个目录只列一次」，再查名字集合。
+            Dictionary<string, HashSet<string>> listings =
+                new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
             foreach (RenameItem it in items)
             {
                 if (!it.Runnable) continue;
                 string target = it.NewFullPath;
                 if (sources.Contains(target)) continue;
-                bool exists = false;
-                try { exists = File.Exists(target) || Directory.Exists(target); }
-                catch (Exception) { }
-                if (exists)
+                if (ExistsInDir(listings, target))
                 {
                     it.Runnable = false;
                     it.Status = "目标已存在";
                 }
             }
+        }
+
+        /// <summary>
+        /// 判断某个完整路径是否已存在，按「目录 → 目录项集合」缓存，
+        /// 同一目录下查 N 次只枚举一次。拿不到目录（权限、盘符消失）时按不存在处理。
+        /// </summary>
+        private static bool ExistsInDir(Dictionary<string, HashSet<string>> cache, string fullPath)
+        {
+            string dir;
+            string name;
+            try
+            {
+                dir = Path.GetDirectoryName(fullPath);
+                name = Path.GetFileName(fullPath);
+            }
+            catch (Exception) { return false; }
+            if (string.IsNullOrEmpty(dir) || string.IsNullOrEmpty(name)) return false;
+
+            HashSet<string> set;
+            if (!cache.TryGetValue(dir, out set))
+            {
+                set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                try
+                {
+                    if (Directory.Exists(dir))
+                    {
+                        foreach (string entry in Directory.GetFileSystemEntries(dir))
+                            set.Add(Path.GetFileName(entry));
+                    }
+                }
+                catch (Exception) { }
+                cache[dir] = set;
+            }
+            return set.Contains(name);
         }
 
         public static string CheckFileName(string name)
