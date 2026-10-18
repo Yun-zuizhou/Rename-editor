@@ -121,7 +121,7 @@ powershell -ExecutionPolicy Bypass -File .\Uninstall.ps1 -RemoveFiles # 连 exe�
 ## 开发
 
 ```
-BatchRename/
+Rename-editor/
 ├─ src/
 │  ├─ Rename.cs        数据模型：重命名模式、应用目录、规则、单个待改项
 │  ├─ Engine.cs        引擎：预览、冲突校验、两阶段改名、撤销
