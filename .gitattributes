@@ -1,0 +1,12 @@
+# 源码与脚本统一 CRLF（源码里带 UTF-8 BOM，git 不会改动它）
+* text=auto eol=crlf
+
+# 二进制
+*.png binary
+*.ico binary
+*.exe binary
+*.dll binary
+*.msix binary
+*.pdf binary
+*.docx binary
+*.jpg binary

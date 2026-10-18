@@ -1,0 +1,24 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 编译并跑自测
+        shell: powershell
+        run: .\Build.ps1 -RunSelfTest
+
+      - name: 上传 exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: BatchRename
+          path: dist/BatchRename.exe
+          if-no-files-found: error

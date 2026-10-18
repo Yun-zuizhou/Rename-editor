@@ -1,0 +1,84 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- DSH 批量重命名 —— Win11 现代右键菜单（稀疏包 + IExplorerCommand） -->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
+  xmlns:desktop5="http://schemas.microsoft.com/appx/manifest/desktop/windows10/5"
+  IgnorableNamespaces="uap uap10 rescap com desktop4 desktop5">
+
+  <Identity
+    Name="DSHBatchRename.Shell"
+    Publisher="CN=DSHBatchRename"
+    Version="1.0.0.0"
+    ProcessorArchitecture="neutral" />
+
+  <Properties>
+    <DisplayName>DSH 批量重命名</DisplayName>
+    <PublisherDisplayName>DSH</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Resources>
+    <Resource Language="zh-CN" />
+  </Resources>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.22000.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="unvirtualizedResources" />
+  </Capabilities>
+
+  <Applications>
+    <Application Id="DSHBatchRename" Executable="BatchRename.exe"
+                 uap10:TrustLevel="mediumIL" uap10:RuntimeBehavior="win32App">
+      <uap:VisualElements
+        AppListEntry="none"
+        DisplayName="DSH 批量重命名"
+        Description="批量重命名资源管理器中的文件"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png" />
+
+      <Extensions>
+        <!-- 命令实现：COM 类由 dllhost.exe 代理加载 -->
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:SurrogateServer DisplayName="DSH 批量重命名命令">
+              <com:Class Id="6E2A4C10-5B7D-4C1E-9A3F-2D8B1C7E5A01" Path="Shell\DSHBRShell.dll" ThreadingModel="STA" />
+              <com:Class Id="6E2A4C10-5B7D-4C1E-9A3F-2D8B1C7E5A02" Path="Shell\DSHBRShell.dll" ThreadingModel="STA" />
+              <com:Class Id="6E2A4C10-5B7D-4C1E-9A3F-2D8B1C7E5A03" Path="Shell\DSHBRShell.dll" ThreadingModel="STA" />
+              <com:Class Id="6E2A4C10-5B7D-4C1E-9A3F-2D8B1C7E5A04" Path="Shell\DSHBRShell.dll" ThreadingModel="STA" />
+              <com:Class Id="6E2A4C10-5B7D-4C1E-9A3F-2D8B1C7E5A05" Path="Shell\DSHBRShell.dll" ThreadingModel="STA" />
+              <com:Class Id="6E2A4C10-5B7D-4C1E-9A3F-2D8B1C7E5A06" Path="Shell\DSHBRShell.dll" ThreadingModel="STA" />
+            </com:SurrogateServer>
+          </com:ComServer>
+        </com:Extension>
+
+        <!-- 菜单项：文件 / 文件夹 / 文件夹空白处 -->
+        <desktop4:Extension Category="windows.fileExplorerContextMenus">
+          <desktop4:FileExplorerContextMenus>
+            <desktop5:ItemType Type="*">
+              <desktop5:Verb Id="DshBatchRename" Clsid="6E2A4C10-5B7D-4C1E-9A3F-2D8B1C7E5A01" />
+              <desktop5:Verb Id="DshBatchRenameQuick" Clsid="6E2A4C10-5B7D-4C1E-9A3F-2D8B1C7E5A02" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type="Directory">
+              <desktop5:Verb Id="DshBatchRenameDir" Clsid="6E2A4C10-5B7D-4C1E-9A3F-2D8B1C7E5A03" />
+              <desktop5:Verb Id="DshBatchRenameDirQuick" Clsid="6E2A4C10-5B7D-4C1E-9A3F-2D8B1C7E5A04" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type="Directory\Background">
+              <desktop5:Verb Id="DshBatchRenameBg" Clsid="6E2A4C10-5B7D-4C1E-9A3F-2D8B1C7E5A05" />
+              <desktop5:Verb Id="DshBatchRenameUndo" Clsid="6E2A4C10-5B7D-4C1E-9A3F-2D8B1C7E5A06" />
+            </desktop5:ItemType>
+          </desktop4:FileExplorerContextMenus>
+        </desktop4:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+</Package>

@@ -1,0 +1,20 @@
+# 构建 / 调试产物
+build/*
+!build/.gitkeep
+shell/build/
+msix/stage/AppxManifest.xml
+_selftest.txt
+*.log
+*.obj
+*.res
+*.exp
+*.lib
+
+# 运行期生成（沙箱里写不了 %LOCALAPPDATA% 时会落到 exe 旁边）
+dist/userdata/
+shell/dist/userdata/
+
+# 编辑器
+.vs/
+*.user
+*.suo
