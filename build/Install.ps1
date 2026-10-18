@@ -4,9 +4,9 @@
   只写 HKCU / 当前用户证书 / 当前用户 Appx，不需要管理员权限。
 
   用法：
-    powershell -ExecutionPolicy Bypass -File .\scripts\Install.ps1
-    powershell -ExecutionPolicy Bypass -File .\scripts\Install.ps1 -ClassicVerbs   # 额外注册经典菜单项（显示在「显示更多选项」里）
-    powershell -ExecutionPolicy Bypass -File .\scripts\Install.ps1 -SkipPackage    # 只装经典菜单项，不注册新式菜单
+    powershell -ExecutionPolicy Bypass -File .\build\Install.ps1
+    powershell -ExecutionPolicy Bypass -File .\build\Install.ps1 -ClassicVerbs   # 额外注册经典菜单项（显示在「显示更多选项」里）
+    powershell -ExecutionPolicy Bypass -File .\build\Install.ps1 -SkipPackage    # 只装经典菜单项，不注册新式菜单
 #>
 [CmdletBinding()]
 param(
@@ -18,10 +18,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$root        = Split-Path -Parent $PSScriptRoot      # scripts\ 的上一层
-$srcExe      = Join-Path $root 'dist\BatchRename.exe'
-$srcDll      = Join-Path $root 'dist\DSHBRShell.dll'
-$srcManifest = Join-Path $root 'package\AppxManifest.xml'
+$root        = Split-Path -Parent $PSScriptRoot      # build\ 的上一层
+$srcExe      = Join-Path $root 'release\BatchRename.exe'
+$srcDll      = Join-Path $root 'release\DSHBRShell.dll'
+$srcManifest = Join-Path $root 'msix\AppxManifest.xml'
 $installDir = Join-Path $env:LOCALAPPDATA 'Programs\DSHBatchRename'
 $exe        = Join-Path $installDir 'BatchRename.exe'
 $dll        = Join-Path $installDir 'Shell\DSHBRShell.dll'
@@ -31,7 +31,7 @@ Write-Host '== 批量重命名 · 安装 ==' -ForegroundColor Cyan
 # ---------------------------------------------------------------- 1. 复制文件
 if (-not $NoCopy) {
     if (-not (Test-Path -LiteralPath $srcExe)) {
-        throw "找不到 $srcExe —— 请先运行 powershell -ExecutionPolicy Bypass -File .\scripts\Build.ps1 编译。"
+        throw "找不到 $srcExe —— 请先运行 powershell -ExecutionPolicy Bypass -File .\build\Build.ps1 编译。"
     }
     New-Item -ItemType Directory -Force -Path $installDir, (Split-Path -Parent $dll) | Out-Null
     Copy-Item -LiteralPath $srcExe -Destination $exe -Force
@@ -49,17 +49,17 @@ if (-not $NoCopy) {
 $packageOk = $false
 if (-not $SkipPackage) {
     if (-not (Test-Path -LiteralPath $srcManifest)) {
-        Write-Host '  跳过新式菜单：未找到 package\AppxManifest.xml' -ForegroundColor DarkYellow
+        Write-Host '  跳过新式菜单：未找到 msix\AppxManifest.xml' -ForegroundColor DarkYellow
     } elseif (-not (Test-Path -LiteralPath $dll)) {
-        Write-Host '  跳过新式菜单：未找到 dist\DSHBRShell.dll（先运行 scripts\Build-Shell.ps1）' -ForegroundColor DarkYellow
+        Write-Host '  跳过新式菜单：未找到 release\DSHBRShell.dll（先运行 build\Build-Shell.ps1）' -ForegroundColor DarkYellow
     } else {
         # 松散文件注册：安装目录本身就是包目录，清单和资产复制进去即可，无需签名
         Copy-Item -LiteralPath $srcManifest -Destination (Join-Path $installDir 'AppxManifest.xml') -Force
-        $srcAssets = Join-Path $root 'package\Assets'
+        $srcAssets = Join-Path $root 'msix\Assets'
         if (Test-Path -LiteralPath $srcAssets) {
             Copy-Item -LiteralPath $srcAssets -Destination $installDir -Recurse -Force
         }
-        $register = Join-Path $root 'scripts\Register-LoosePackage.ps1'
+        $register = Join-Path $root 'build\Register-LoosePackage.ps1'
         & powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass `
             -File $register -ManifestPath (Join-Path $installDir 'AppxManifest.xml')
         if ($LASTEXITCODE -ne 0) { throw "新式菜单注册失败: $LASTEXITCODE" }

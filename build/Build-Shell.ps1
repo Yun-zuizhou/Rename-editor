@@ -2,11 +2,11 @@
 # 依赖：VS 2026 的 MSVC + D:\Windows Kits\10 的 Windows SDK
 # 直接设置 INCLUDE/LIB 环境变量后调用 cl.exe，不经过 vcvars（规避 cmd 引号问题）
 $ErrorActionPreference = 'Stop'
-$root = Split-Path -Parent $PSScriptRoot       # scripts\ 的上一层
-$src = Join-Path $root 'src\shell'
-$build = Join-Path $root 'build\shell'
-$out = Join-Path $root 'dist'
-New-Item -ItemType Directory -Force -Path $build, $out | Out-Null
+$root = Split-Path -Parent $PSScriptRoot       # build\ 的上一层
+$src = Join-Path $root 'src\Shell'
+$objDir = Join-Path $root 'out\shell'
+$releaseDir = Join-Path $root 'release'
+New-Item -ItemType Directory -Force -Path $objDir, $releaseDir | Out-Null
 
 $vsRoot = 'C:\Program Files\Microsoft Visual Studio\18\Community'
 $msvc = Get-ChildItem (Join-Path $vsRoot 'VC\Tools\MSVC') -Directory |
@@ -40,8 +40,8 @@ $env:PATH = (@(
     "$sdk\bin\$v\x64"
 ) -join ';') + ';' + $env:PATH
 
-$resFile = Join-Path $build 'resources.res'
-$dll = Join-Path $out 'DSHBRShell.dll'
+$resFile = Join-Path $objDir 'resources.res'   # 中间产物统一丢到 out\，别污染 src\Shell
+$dll = Join-Path $releaseDir 'DSHBRShell.dll'
 if (Test-Path $dll) { Remove-Item $dll -Force }
 
 "SDK $v | MSVC $($msvc.Name)"
@@ -51,7 +51,7 @@ if ($LASTEXITCODE -ne 0) { throw "rc 编译失败: $LASTEXITCODE" }
 Push-Location $src
 try {
     & $cl /nologo /LD /MT /O2 /EHsc /std:c++17 /utf-8 /DUNICODE /D_UNICODE /W3 `
-        "/Fo$build\\" ShellCommand.cpp $resFile /link /DLL /EXPORT:DllGetClassObject /EXPORT:DllCanUnloadNow "/OUT:$dll" `
+        "/Fo$objDir\\" ShellCommand.cpp $resFile /link /DLL /EXPORT:DllGetClassObject /EXPORT:DllCanUnloadNow "/OUT:$dll" "/IMPLIB:$objDir\ShellCommand.lib" `
         shlwapi.lib ole32.lib oleaut32.lib shell32.lib user32.lib uuid.lib
     if ($LASTEXITCODE -ne 0) { throw "cl 编译失败: $LASTEXITCODE" }
 }
