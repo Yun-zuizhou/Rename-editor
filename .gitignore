@@ -18,3 +18,6 @@ shell/dist/userdata/
 .vs/
 *.user
 *.suo
+
+# 安装器调试输出
+dist/setup-*.txt
