@@ -2,7 +2,7 @@
 
 选中任意多个文件 → 右键 → **批量重命名**，一个窗口搞定 N 个文件的重命名；规则存下来之后还可以用 **快速重命名** 真正一键套用。
 
-Windows 10 / 11 · .NET Framework 4 · 免管理员权限 · 自带 24 项自测
+Windows 10 / 11 · .NET Framework 4 · 免管理员权限 · 自带 28 项自测
 
 ![界面](docs/screenshot.png)
 
@@ -147,7 +147,7 @@ powershell -ExecutionPolicy Bypass -File .\Uninstall.ps1 -RemoveFiles # 连 exe�
 | `--quick 文件…` | 套用上次保存的规则直接改名，弹提示条（无规则时退回窗口） |
 | `--folder 目录…` | 把目录展开成其中的条目再进窗口 |
 | `--undo` | 撤销最近一次 |
-| `--selftest <输出文件>` | 跑内置 24 项自测，结果写文件，退出码 0/1 |
+| `--selftest <输出文件>` | 跑内置 28 项自测，结果写文件，退出码 0/1 |
 | `--shot <png> 文件…` | 把主窗口渲染成图片（开发用，验证布局与中文） |
 
 ## 开发
@@ -158,7 +158,7 @@ Rename-editor/
 │  ├─ Rename.cs        数据模型：重命名模式、应用目录、规则、单个待改项
 │  ├─ Engine.cs        引擎：预览、冲突校验、两阶段改名、撤销
 │  ├─ Program.cs       入口：命令行解析、GUI 启动、提示条、离线截图
-│  ├─ SelfTest.cs      内置自测（--selftest，24 项）
+│  ├─ SelfTest.cs      内置自测（--selftest，28 项）
 │  ├─ UiForm.cs        主窗口（自绘、布局、预览、交互）
 │  ├─ RowEditor.cs     列表里的行内改名输入框（摆放 / 提交 / 放弃）
 │  ├─ UiTheme.cs       配色 / 字体缓存 / 绘图基元（Brush·Pen·文字宽度缓存）/ 无边框圆角窗体 / 下拉浮层
@@ -219,3 +219,10 @@ Windows 11 的**新式**一级右键菜单不认 `HKCU\Software\Classes\*\shell`
 - 菜单扩展（`DSHBRShell.dll`）是 **x64**，32 位 Windows 上用不了（exe 本身与位数无关，直接双击仍可运行）。
 - 新式菜单依赖开发者模式才能松散注册；没开时只能用 `-ClassicMenu` 或直接把文件拖进窗口。
 - 无权限的位置（系统目录、部分 OneDrive 场景）会在预览里标红并跳过，不会中途炸掉。
+
+## 支持这个项目
+
+如果它帮你省下了反复「右键 → 重命名」的时间：
+
+- 给个 ⭐ Star 就是最好的支持
+- 想请我喝杯咖啡：[爱发电](https://afdian.com/a/hs007)
