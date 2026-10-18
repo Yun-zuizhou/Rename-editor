@@ -1,0 +1,1 @@
+失败：对路径“C:\Users\26926\AppData\Local\Programs\DSHBatchRename”的访问被拒绝。

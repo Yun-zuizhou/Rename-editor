@@ -26,6 +26,18 @@ powershell -ExecutionPolicy Bypass -File .\Install.ps1
 
 ## 安装
 
+### 方式一：单文件安装包（推荐）
+
+下载 **[dist/RenameEditorSetup.exe](dist/RenameEditorSetup.exe)**，双击即可。无需联网、无需管理员权限、不用装 .NET SDK —— 主程序、菜单扩展 DLL、包清单、包图标全部已嵌在这一个 1.7 MB 的 exe 里。
+
+- 双击 = 安装；再运行一次并加 `--uninstall` = 卸载
+- `--silent` 静默安装（无界面），`--dir <路径>` 装到自定义目录
+- 装完在资源管理器里选中文件 → 右键 →「批量重命名」
+
+如果系统没开**开发者模式**，一级菜单注册会失败，安装程序会自动退回经典菜单项（在「显示更多选项」/`Shift+F10` 里），并提示你如何打开开发者模式。
+
+### 方式二：从源码安装
+
 exe 只依赖 .NET Framework 4（Win10/11 自带）；菜单扩展是一个原生 COM DLL，通过**松散包注册**挂进 Win11 新式右键菜单，全程不需要管理员权限、不需要签名证书，只写 `HKCU` 和 `%LOCALAPPDATA%`。
 
 需要系统已开启**开发者模式**（设置 → 隐私和安全性 → 开发者选项），因为 `Add-AppxPackage -Register` 依赖它。
@@ -36,6 +48,12 @@ powershell -ExecutionPolicy Bypass -File .\Build.ps1
 
 # 2) 安装：复制到 %LOCALAPPDATA%\Programs\DSHBatchRename，注册 COM + 松散包
 powershell -ExecutionPolicy Bypass -File .\Install.ps1
+```
+
+重新打包单文件安装器：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup\Build-Setup.ps1
 ```
 
 卸载：
@@ -142,6 +160,9 @@ Rename-editor/
 │  ├─ MakeIcon.cs       生成三个菜单图标（.ico，16–256 多尺寸）
 │  ├─ Shot-ShellMenu.ps1 截取真实右键菜单（开发用）
 │  └─ Register-LoosePackage.ps1  松散包注册的幂等封装
+├─ setup/
+│  ├─ Setup.cs          单文件安装/卸载器（把下面四样嵌进一个 exe）
+│  └─ Build-Setup.ps1   打包 dist/RenameEditorSetup.exe
 ├─ shell/dist/          编译产物：DSHBRShell.dll、ComProbe.exe
 ├─ docs/                README 用的界面截图
 ├─ Pack-Shell.ps1      打 msix（仅用于验证清单，实际安装走松散注册）
@@ -149,7 +170,8 @@ Rename-editor/
 ├─ Install.ps1         装（复制 + 注册 COM + 松散包注册）
 ├─ Uninstall.ps1       卸
 ├─ demo/               试手用的样本文件（故意起得很乱）
-└─ dist/BatchRename.exe 产物（单文件，约 64 KB）
+├─ dist/BatchRename.exe         产物（单文件，约 64 KB）
+└─ dist/RenameEditorSetup.exe   单文件安装包（约 1.7 MB，双击即装）
 ```
 
 ```powershell
