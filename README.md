@@ -17,18 +17,18 @@ Windows 10 / 11 · .NET Framework 4 · 免管理员权限 · 自带 28 项自测
 ```powershell
 git clone https://github.com/Yun-zuizhou/Rename-editor.git
 cd Rename-editor
-powershell -ExecutionPolicy Bypass -File .\scripts\Install.ps1
+powershell -ExecutionPolicy Bypass -File .\build\Install.ps1
 ```
 
-仓库里带着编译好的 `dist\BatchRename.exe` 和 `dist\DSHBRShell.dll`，所以**不用装任何 SDK 就能直接安装**。想自己编译见下方「开发」。
+仓库里带着编译好的 `release\BatchRename.exe` 和 `release\DSHBRShell.dll`，所以**不用装任何 SDK 就能直接安装**。想自己编译见下方「开发」。
 
-只想要经典菜单（不注册新式菜单），用 `scripts\Install.ps1 -SkipPackage`。
+只想要经典菜单（不注册新式菜单），用 `build\Install.ps1 -SkipPackage`。
 
 ## 安装
 
 ### 方式一：单文件安装包（推荐）
 
-下载 **[dist/RenameEditorSetup.exe](dist/RenameEditorSetup.exe)**，双击即可。无需联网、无需管理员权限、不用装 .NET SDK —— 主程序、菜单扩展 DLL、包清单、包图标全部已嵌在这一个 1.7 MB 的 exe 里。
+下载 **[release/RenameEditorSetup.exe](release/RenameEditorSetup.exe)**，双击即可。无需联网、无需管理员权限、不用装 .NET SDK —— 主程序、菜单扩展 DLL、包清单、包图标全部已嵌在这一个 1.7 MB 的 exe 里。
 
 - 双击 = 安装；再运行一次并加 `--uninstall` = 卸载
 - `--silent` 静默安装（无界面），`--dir <路径>` 装到自定义目录
@@ -43,24 +43,24 @@ exe 只依赖 .NET Framework 4（Win10/11 自带）；菜单扩展是一个原�
 需要系统已开启**开发者模式**（设置 → 隐私和安全性 → 开发者选项），因为 `Add-AppxPackage -Register` 依赖它。
 
 ```powershell
-# 1) 编译（产物在 dist\BatchRename.exe）
-powershell -ExecutionPolicy Bypass -File .\scripts\Build.ps1
+# 1) 编译（产物在 release\BatchRename.exe）
+powershell -ExecutionPolicy Bypass -File .\build\Build.ps1
 
 # 2) 安装：复制到 %LOCALAPPDATA%\Programs\DSHBatchRename，注册 COM + 松散包
-powershell -ExecutionPolicy Bypass -File .\scripts\Install.ps1
+powershell -ExecutionPolicy Bypass -File .\build\Install.ps1
 ```
 
 重新打包单文件安装器：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\Build-Setup.ps1
+powershell -ExecutionPolicy Bypass -File .\build\Build-Setup.ps1
 ```
 
 卸载：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\Uninstall.ps1              # 删菜单项 + 注销包
-powershell -ExecutionPolicy Bypass -File .\scripts\Uninstall.ps1 -RemoveFiles # 连 exe、配置一起删
+powershell -ExecutionPolicy Bypass -File .\build\Uninstall.ps1              # 删菜单项 + 注销包
+powershell -ExecutionPolicy Bypass -File .\build\Uninstall.ps1 -RemoveFiles # 连 exe、配置一起删
 ```
 
 安装后会多出这几项（都在**一级**右键菜单里，不用点「显示更多选项」）：
@@ -74,7 +74,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\Uninstall.ps1 -RemoveFiles # 
 | 文件夹空白处 | 批量重命名（本文件夹）… | 把该文件夹里的所有条目拉进预览窗口 |
 | 文件夹空白处 | 撤销上次批量重命名 | 回滚最近一次 |
 
-> 也可以不安装：直接把 `dist\BatchRename.exe` 拖到任意位置双击运行，或把文件拖进窗口。
+> 也可以不安装：直接把 `release\BatchRename.exe` 拖到任意位置双击运行，或把文件拖进窗口。
 
 ## 界面与动线
 
@@ -153,9 +153,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\Uninstall.ps1 -RemoveFiles # 
 ## 开发
 
 ```
-Rename-editor/
+RenameEditor/
 ├─ src/
-│  ├─ app/                  主程序（C# 5 + WinForms，用 .NET Framework 自带 csc 编译）
+│  ├─ App/                  主程序（C# 5 + WinForms，用 .NET Framework 自带 csc 编译）
 │  │  ├─ Rename.cs          数据模型：重命名模式、规则、单个待改项
 │  │  ├─ Engine.cs          引擎：预览、冲突校验、两阶段改名、撤销
 │  │  ├─ Program.cs         入口：命令行解析、GUI 启动、提示条、离线截图
@@ -165,36 +165,36 @@ Rename-editor/
 │  │  ├─ UiTheme.cs         配色 / 字体缓存 / 绘图基元 / 无边框圆角窗体 / 下拉浮层
 │  │  ├─ Dev.cs             开发期环境变量开关（正常使用不读）
 │  │  └─ app.manifest       DPI 感知 + 长路径
-│  ├─ shell/                右键菜单扩展（原生 C++，x64）
+│  ├─ Shell/                右键菜单扩展（原生 C++，x64）
 │  │  ├─ ShellCommand.cpp   IExplorerCommand 实现（6 个菜单动词共用一个类）
 │  │  ├─ ComProbe.cpp       命令行探针：验证 COM 类的标题/图标/状态
 │  │  ├─ resources.rc       菜单图标资源（资源号 -101 / -102 / -103）
 │  │  └─ shell*.ico         三套菜单图标（16–256 多尺寸，32bpp）
-│  ├─ setup/Setup.cs        单文件安装/卸载器（把产物嵌进一个 exe）
-│  └─ tools/MakeIcon.cs     图标生成器（输出到 src\shell\*.ico）
-├─ package/
+│  ├─ Setup/Setup.cs        单文件安装/卸载器（把产物嵌进一个 exe）
+│  └─ Tools/MakeIcon.cs     图标生成器（输出到 src\Shell\*.ico）
+├─ msix/
 │  ├─ AppxManifest.xml      包清单（com:SurrogateServer + fileExplorerContextMenus）
 │  └─ Assets/               包内三张图标（Square44/150、StoreLogo）
-├─ scripts/
+├─ build/                   构建脚本（PowerShell）
 │  ├─ Build.ps1             调 csc 编译主程序；-RunSelfTest 跑自测
-│  ├─ Build-Shell.ps1       调 MSVC 编译菜单 DLL → dist/DSHBRShell.dll
-│  ├─ Build-Setup.ps1       打包 dist/RenameEditorSetup.exe
+│  ├─ Build-Shell.ps1       调 MSVC 编译菜单 DLL → release/DSHBRShell.dll
+│  ├─ Build-Setup.ps1       打包 release/RenameEditorSetup.exe
 │  ├─ Install.ps1           装（复制 + 松散包注册 + 可选经典菜单项）
 │  ├─ Uninstall.ps1         卸（删菜单项、注销包、可选删文件）
 │  ├─ Pack-Shell.ps1        打 msix（只用于验证清单；安装走松散注册）
 │  ├─ Register-LoosePackage.ps1  松散包注册的幂等封装（由 Install.ps1 调用）
 │  └─ Shot-ShellMenu.ps1    截取真实右键菜单（开发用）
-├─ dist/                    仓库内直接带产物，下载即用
+├─ release/                 仓库内直接带产物，下载即用
 │  ├─ BatchRename.exe       主程序（约 72 KB，不需要任何 SDK）
 │  ├─ DSHBRShell.dll        菜单扩展（x64，约 1.3 MB）
 │  └─ RenameEditorSetup.exe 单文件安装包（约 1.7 MB，双击即装）
 ├─ docs/                    README 用的界面截图
 ├─ samples/                 试手用的样本文件（故意起得很乱）
-└─ build/                   本地临时目录（gitignore，不进仓库）
+└─ out/                     编译中间产物（gitignore，不进仓库）
 ```
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\Build.ps1 -RunSelfTest
+powershell -ExecutionPolicy Bypass -File .\build\Build.ps1 -RunSelfTest
 ```
 
 自测覆盖：自然排序、模板展开、正则分组、前后缀位置、大小写与清理规则、非法字符、目标存在、同批重名、链式改名、撤销链式改名、文件夹改名、手动改名与序号互不干扰、切方式后手写名仍保留。
@@ -205,14 +205,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\Build.ps1 -RunSelfTest
 
 Windows 11 的**新式**一级右键菜单不认 `HKCU\Software\Classes\*\shell` 这种传统注册方式，只认**实现了 `IExplorerCommand` 的打包应用**。本工具的菜单扩展就是按这条路做的：
 
-1. `dist/DSHBRShell.dll`（源码 `src/shell/ShellCommand.cpp`）实现 `IExplorerCommand`（`GetTitle` / `GetIcon` / `GetState` / `Invoke`），6 个菜单动词共用一份实现、靠 CLSID 分派。
-2. `package/AppxManifest.xml` 声明 `com:SurrogateServer` + `desktop4:FileExplorerContextMenus`（`*`、`Directory`、`Directory\Background`）。
-3. `scripts/Install.ps1` 用 `Add-AppxPackage -Register` 做**松散文件注册**——不走签名和 MSIX 安装包，所以不需要证书；注册后系统会在 `PackagedCom\ClassIndex` 里挂上这 6 个 CLSID，资源管理器据此加载扩展。
+1. `release/DSHBRShell.dll`（源码 `src/Shell/ShellCommand.cpp`）实现 `IExplorerCommand`（`GetTitle` / `GetIcon` / `GetState` / `Invoke`），6 个菜单动词共用一份实现、靠 CLSID 分派。
+2. `msix/AppxManifest.xml` 声明 `com:SurrogateServer` + `desktop4:FileExplorerContextMenus`（`*`、`Directory`、`Directory\Background`）。
+3. `build/Install.ps1` 用 `Add-AppxPackage -Register` 做**松散文件注册**——不走签名和 MSIX 安装包，所以不需要证书；注册后系统会在 `PackagedCom\ClassIndex` 里挂上这 6 个 CLSID，资源管理器据此加载扩展。
 
 如果这台机器没开开发者模式（注册会失败），或者你更习惯经典菜单，有两条退路：
 
-1. **经典项**：`scripts\Install.ps1 -ClassicVerbs` 会额外写 5 个传统菜单项，它们出现在「显示更多选项」/`Shift+F10` 里。
-2. **整体回到 Win10 风格菜单**：`scripts\Install.ps1 -ClassicMenu`（写一个 CLSID 键即可），`scripts\Uninstall.ps1` 会还原。
+1. **经典项**：`build\Install.ps1 -ClassicVerbs` 会额外写 5 个传统菜单项，它们出现在「显示更多选项」/`Shift+F10` 里。
+2. **整体回到 Win10 风格菜单**：`build\Install.ps1 -ClassicMenu`（写一个 CLSID 键即可），`build\Uninstall.ps1` 会还原。
 
 外观上能自定义的只有菜单项的**文字**和 **20px 图标**（行高、配色、圆角都由系统绘制），所以这部分的设计重点放在图标本身：`src/tools/MakeIcon.cs` 生成三个变体（蓝=主功能、橙=快速、灰蓝=撤销），16–256 多尺寸 32bpp。
 

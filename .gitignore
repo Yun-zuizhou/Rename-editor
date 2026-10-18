@@ -1,6 +1,6 @@
-# 构建 / 调试产物（build\ 是本地临时目录，不进仓库）
-build/
-dist/userdata/
+# 构建中间产物（out\ 是本地临时目录，不进仓库）
+out/
+release/userdata/
 _selftest.txt
 *.log
 *.obj

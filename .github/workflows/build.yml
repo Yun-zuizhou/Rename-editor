@@ -14,17 +14,17 @@ jobs:
 
       - name: 编译并跑自测
         shell: powershell
-        run: .\scripts\Build.ps1 -RunSelfTest
+        run: .\build\Build.ps1 -RunSelfTest
 
       - name: 打包单文件安装器
         shell: powershell
-        run: .\scripts\Build-Setup.ps1
+        run: .\build\Build-Setup.ps1
 
       - name: 上传 exe
         uses: actions/upload-artifact@v4
         with:
           name: BatchRename
           path: |
-            dist/BatchRename.exe
-            dist/RenameEditorSetup.exe
+            release/BatchRename.exe
+            release/RenameEditorSetup.exe
           if-no-files-found: error
