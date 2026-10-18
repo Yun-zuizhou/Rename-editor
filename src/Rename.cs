@@ -16,7 +16,8 @@ namespace DshBatchRename
         Sequence = 0,
         Replace = 1,
         Affix = 2,
-        Case = 3
+        Case = 3,
+        Free = 4              // 自由命名：每一条自己写名字，规则不参与计算
     }
 
     internal static class AppInfo
@@ -191,6 +192,8 @@ namespace DshBatchRename
         public bool Excluded;
         public bool Runnable;
         public bool IsDir;
+        public bool Manual;          // 这一条被手动改过名，规则不再覆盖它
+        public string ManualName;    // 手动指定的完整新文件名（含扩展名）
         public DateTime MTime;
         public long Size;
 

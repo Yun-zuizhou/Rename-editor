@@ -11,8 +11,9 @@ namespace DshBatchRename
     /// <summary>
     /// 只给开发和离线截图用的环境变量开关，正常运行完全不读它们。
     ///   DSHBR_THEME=light|dark   强制配色（不设则跟随系统）
-    ///   DSHBR_SHOT_MODE=0..3     强制落到某个规则页签（0 按序号 1 查找替换 2 加前缀后缀 3 大小写清理）
+    ///   DSHBR_SHOT_MODE=0..4     强制落到某个规则页签（0 按序号 1 查找替换 2 加前缀后缀 3 大小写清理 4 自由命名）
     ///   DSHBR_SHOT_AFFIX=前缀    预填前缀，用来核对输入框能正常显示文字
+    ///   DSHBR_SHOT_MANUAL=名字    把第一行标成手写名，用来核对「手动」标记
     ///   DSHBR_DEBUG=1            把窗口尺寸/缩放写进 %TEMP%\dshbr-ui.log
     /// </summary>
     internal static class Dev
@@ -30,12 +31,18 @@ namespace DshBatchRename
             if (string.IsNullOrEmpty(v)) return -1;
             int n;
             if (!int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out n)) return -1;
-            return (n >= 0 && n <= 3) ? n : -1;
+            return (n >= 0 && n <= 4) ? n : -1;
         }
 
         public static string ShotPrefix()
         {
             return Env("DSHBR_SHOT_AFFIX");
+        }
+
+        /// <summary>把第一行标成手写名，用来截图核对「手动」标记。</summary>
+        public static string ShotManual()
+        {
+            return Env("DSHBR_SHOT_MANUAL");
         }
 
         public static void Log(string msg)

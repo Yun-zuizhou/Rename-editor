@@ -93,6 +93,18 @@ namespace DshBatchRename
                     it.Status = "已排除";
                     continue;
                 }
+                if (it.Manual)
+                {
+                    // 手动改过的行：整名照用，且不吃序号（不然序号会出现空洞）
+                    it.NewName = string.IsNullOrEmpty(it.ManualName) ? it.OldName : it.ManualName;
+                    continue;
+                }
+                if (rule.Mode == RenameMode.Free)
+                {
+                    // 自由命名模式：没手改过的行保持原名
+                    it.NewName = it.OldName;
+                    continue;
+                }
                 string newBase = ComputeBase(it, rule, n);
                 it.NewName = BuildName(it, rule, newBase);
                 n += rule.Step;
